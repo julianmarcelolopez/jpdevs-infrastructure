@@ -7,7 +7,7 @@ resource "aws_lambda_function" "jpdevs_backend" {
   memory_size   = 256
 
   s3_bucket     = var.code_bucket_name
-  s3_key        = "lambda/${var.function_name}/${var.version}/function.zip"
+  s3_key        = "lambda/${var.function_name}/${var.code_version}/function.zip"
 
   environment {
     variables = {

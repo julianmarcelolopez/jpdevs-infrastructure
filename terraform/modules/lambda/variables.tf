@@ -20,7 +20,7 @@ variable "code_bucket_name" {
   type        = string
 }
 
-variable "version" {
+variable "code_version" {
   description = "Versión del código a desplegar"
   type        = string
   default     = "latest"

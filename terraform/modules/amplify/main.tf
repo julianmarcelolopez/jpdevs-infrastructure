@@ -2,7 +2,7 @@ resource "aws_amplify_app" "jpdevs_frontend" {
   name = "jpdevs-frontend"
   repository = "https://github.com/julianmarcelolopez/jpdevs-front"
 
-  # Configuraciones de build
+  # Configuraciones de build actualizadas para coincidir con tu amplify.yml
   build_spec = <<-EOT
 version: 1
 frontend:
@@ -14,25 +14,30 @@ frontend:
       commands:
         - npm run build
   artifacts:
-    baseDirectory: build
+    baseDirectory: dist
     files:
       - '**/*'
   cache:
     paths:
       - node_modules/**/*
+      - .vite/**/*
 EOT
 
-  # Configuración de ramas
+  # Variables de entorno a nivel de aplicación
   environment_variables = {
     ENV = "production"
   }
+}
 
-  # Configuraciones específicas de entorno
-  dynamic "branch" {
-    for_each = ["main", "develop"]
-    content {
-      branch_name = branch.value
-      stage = branch.value == "main" ? "PRODUCTION" : "DEVELOPMENT"
-    }
-  }
+# Definir las ramas como recursos separados
+resource "aws_amplify_branch" "main" {
+  app_id      = aws_amplify_app.jpdevs_frontend.id
+  branch_name = "main"
+  stage       = "PRODUCTION"
+}
+
+resource "aws_amplify_branch" "develop" {
+  app_id      = aws_amplify_app.jpdevs_frontend.id
+  branch_name = "develop"
+  stage       = "DEVELOPMENT"
 }

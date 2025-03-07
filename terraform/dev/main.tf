@@ -16,7 +16,7 @@ module "lambda" {
   environment             = "dev"
   lambda_execution_role_arn = module.iam.lambda_execution_role_arn
   code_bucket_name        = var.code_bucket_name
-  version                 = var.code_version
+  code_version            = var.code_version
 }
 
 module "amplify" {
