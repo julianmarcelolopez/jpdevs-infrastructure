@@ -56,3 +56,17 @@ terraform.rc
 # Directorios de IDE/editores
 .idea/
 .vscode/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+.terraform.lock.hcl
+
+# AWS
+.aws/
+
+# Misc
+.DS_Store
+*.log
