@@ -1,4 +1,5 @@
 name: Frontend Deploy to Amplify
+
 on:
   push:
     branches:
@@ -8,6 +9,7 @@ on:
     branches:
       - main
       - develop
+
 jobs:
   setup-backend:
     runs-on: ubuntu-latest
@@ -23,16 +25,26 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
-      - name: Create S3 Bucket if not exists
+      - name: Create S3 Buckets if not exists
         run: |
-          # Check if bucket exists
+          # Check if terraform state bucket exists
           if ! aws s3 ls "s3://jpdevs-terraform-state" 2>&1 | grep -q 'NoSuchBucket'; then
-            echo "Bucket already exists"
+            echo "Terraform state bucket already exists"
           else
-            echo "Creating bucket"
+            echo "Creating terraform state bucket"
             aws s3 mb s3://jpdevs-terraform-state --region us-east-1
             # Enable versioning for state recovery
             aws s3api put-bucket-versioning --bucket jpdevs-terraform-state --versioning-configuration Status=Enabled
+          fi
+          
+          # Check if Lambda code bucket exists
+          if ! aws s3 ls "s3://jpdevs-code-bucket-dev" 2>&1 | grep -q 'NoSuchBucket'; then
+            echo "Lambda code bucket already exists"
+          else
+            echo "Creating Lambda code bucket"
+            aws s3 mb s3://jpdevs-code-bucket-dev --region us-east-1
+            # Enable versioning for code recovery
+            aws s3api put-bucket-versioning --bucket jpdevs-code-bucket-dev --versioning-configuration Status=Enabled
           fi
 
   deploy:

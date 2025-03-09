@@ -25,16 +25,26 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
-      - name: Create S3 Bucket if not exists
+      - name: Create S3 Buckets if not exists
         run: |
-          # Check if bucket exists
+          # Check if terraform state bucket exists
           if ! aws s3 ls "s3://jpdevs-terraform-state" 2>&1 | grep -q 'NoSuchBucket'; then
-            echo "Bucket already exists"
+            echo "Terraform state bucket already exists"
           else
-            echo "Creating bucket"
+            echo "Creating terraform state bucket"
             aws s3 mb s3://jpdevs-terraform-state --region us-east-1
             # Enable versioning for state recovery
             aws s3api put-bucket-versioning --bucket jpdevs-terraform-state --versioning-configuration Status=Enabled
+          fi
+          
+          # Check if Lambda code bucket exists
+          if ! aws s3 ls "s3://jpdevs-code-bucket-dev" 2>&1 | grep -q 'NoSuchBucket'; then
+            echo "Lambda code bucket already exists"
+          else
+            echo "Creating Lambda code bucket"
+            aws s3 mb s3://jpdevs-code-bucket-dev --region us-east-1
+            # Enable versioning for code recovery
+            aws s3api put-bucket-versioning --bucket jpdevs-code-bucket-dev --versioning-configuration Status=Enabled
           fi
 
   deploy:
@@ -65,20 +75,33 @@ jobs:
           }
           EOL
 
+      - name: Package and Upload Lambda Function
+        run: |
+          # Suponiendo que el código Lambda está en una carpeta 'backend' en tu repositorio
+          # Ajusta la ruta según la estructura de tu proyecto
+          cd backend || cd lambda || cd src/lambda || echo "Warning: Lambda directory not found"
+          
+          # Empaquetar el código
+          zip -r function.zip . || echo "Warning: Failed to create function.zip"
+          
+          # Crear la estructura de directorios en S3 y subir el archivo
+          aws s3api put-object --bucket jpdevs-code-bucket-dev --key lambda/jpdevs-backend/0.1.0/ || echo "Warning: Failed to create directory in S3"
+          aws s3 cp function.zip s3://jpdevs-code-bucket-dev/lambda/jpdevs-backend/0.1.0/function.zip || echo "Warning: Failed to upload function.zip to S3"
+
       - name: Terraform Init
         run: terraform -chdir=terraform/dev init -reconfigure
 
       - name: Import Existing Resources
         run: |
           cd terraform/dev
-          # Importar los recursos IAM existentes
+          # Importar el rol IAM existente
           terraform import module.iam.aws_iam_role.lambda_execution_role jpdevs-lambda-execution-role-dev || echo "Import role failed, proceeding..."
-          terraform import module.iam.aws_iam_policy.lambda_policy arn:aws:iam::*:policy/jpdevs-lambda-policy-dev || echo "Import policy failed, proceeding..."
           
-          # Si el attachment existe, necesitamos saber el ID correcto para importarlo
-          # Obtenemos el ARN de la política
+          # Obtener el ARN real de la política
           POLICY_ARN=$(aws iam list-policies --query "Policies[?PolicyName=='jpdevs-lambda-policy-dev'].Arn" --output text)
           if [ ! -z "$POLICY_ARN" ]; then
+            echo "Importing IAM policy: $POLICY_ARN"
+            terraform import module.iam.aws_iam_policy.lambda_policy $POLICY_ARN || echo "Import policy failed, proceeding..."
             terraform import module.iam.aws_iam_role_policy_attachment.lambda_policy_attachment jpdevs-lambda-execution-role-dev:$POLICY_ARN || echo "Import attachment failed, proceeding..."
           fi
 
