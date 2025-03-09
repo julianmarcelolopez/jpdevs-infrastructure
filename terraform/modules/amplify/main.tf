@@ -1,10 +1,9 @@
 resource "aws_amplify_app" "frontend_app" {
-  name         = "jpdevs-front-${var.environment}"
+  name         = var.app_name
   repository   = var.repository_url
   access_token = var.github_access_token
 
-  # Configuración de construcción según tu amplify.yml actual
-  build_spec = <<-EOT
+  build_spec = var.build_spec != "" ? var.build_spec : <<-EOT
 version: 1
 frontend:
   phases:
@@ -23,33 +22,39 @@ frontend:
       - '.npm/**/*'
 EOT
 
-  # Variables de entorno comunes a todas las ramas
-  environment_variables = {
-    REACT_APP_MAIL_SENDER_URL = var.environment == "prod" ? "https://main.d13c67jud9spm1.amplifyapp.com/" : "https://develop.d13c67jud9spm1.amplifyapp.com/"
-    REACT_APP_QR_SCANNER_URL = var.environment == "prod" ? "https://main.d8eci5asqo38h.amplifyapp.com/" : "https://develop.d8eci5asqo38h.amplifyapp.com/"
-  }
+  environment_variables = var.environment_variables
 
-  # Configuración de plataforma
   platform = "WEB"
-
-  # Configuración automática de ramas
-  enable_auto_branch_creation = false
-  enable_branch_auto_build    = true
-  enable_branch_auto_deletion = false
+  enable_auto_branch_creation = var.enable_auto_branch_creation
+  enable_branch_auto_build    = var.enable_branch_auto_build
+  enable_branch_auto_deletion = var.enable_branch_auto_deletion
 }
 
-# Configuración de la rama específica
+# Rama principal (la que se define en la variable branch_name)
 resource "aws_amplify_branch" "frontend_branch" {
   app_id      = aws_amplify_app.frontend_app.id
   branch_name = var.branch_name
 
-  framework          = "React"
-  stage              = var.environment == "prod" ? "PRODUCTION" : "DEVELOPMENT"
-  enable_auto_build  = true
+  framework          = try(var.branches[var.branch_name].framework, "React")
+  stage              = try(var.branches[var.branch_name].stage, var.environment == "prod" ? "PRODUCTION" : "DEVELOPMENT")
+  enable_auto_build  = try(var.branches[var.branch_name].enable_auto_build, true)
 
-  # Variables de entorno específicas de rama
-  environment_variables = var.environment == "prod" ? {} : {
-    REACT_APP_MAIL_SENDER_URL = "https://develop.d13c67jud9spm1.amplifyapp.com/"
-    REACT_APP_QR_SCANNER_URL = "https://develop.d8eci5asqo38h.amplifyapp.com/"
+  environment_variables = try(var.branches[var.branch_name].environment_variables, {})
+}
+
+# Ramas adicionales definidas en la variable branches
+resource "aws_amplify_branch" "additional_branches" {
+  for_each = {
+    for name, config in var.branches : name => config
+    if name != var.branch_name  # Excluimos la rama principal que ya se creó arriba
   }
+
+  app_id      = aws_amplify_app.frontend_app.id
+  branch_name = each.key
+
+  framework          = each.value.framework
+  stage              = each.value.stage
+  enable_auto_build  = each.value.enable_auto_build
+
+  environment_variables = each.value.environment_variables
 }

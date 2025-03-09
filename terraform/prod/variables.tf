@@ -19,3 +19,9 @@ variable "code_version" {
   type        = string
   default     = "latest"
 }
+
+variable "github_access_token" {
+  description = "Token de acceso personal de GitHub para Amplify"
+  type        = string
+  sensitive   = true
+}
