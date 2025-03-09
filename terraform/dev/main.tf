@@ -1,7 +1,10 @@
+# terraform/dev/main.tf
+
 provider "aws" {
   region = var.aws_region
 }
 
+# Módulo IAM (mantenido como estaba)
 module "iam" {
   source = "../modules/iam"
 
@@ -9,6 +12,7 @@ module "iam" {
   dynamodb_table_arns = ["arn:aws:dynamodb:${var.aws_region}:${var.aws_account_id}:table/jpdevs-table-dev"]
 }
 
+# Módulo Lambda (mantenido como estaba)
 module "lambda" {
   source = "../modules/lambda"
 
@@ -19,6 +23,7 @@ module "lambda" {
   code_version            = var.code_version
 }
 
+# Módulo Amplify (actualizado con configuración específica)
 module "amplify" {
   source = "../modules/amplify"
 
@@ -26,4 +31,9 @@ module "amplify" {
   environment    = "dev"
   branch_name    = "develop"
   github_access_token = var.github_access_token
+}
+
+# Outputs
+output "amplify_app_url" {
+  value = module.amplify.branch_urls["develop"]
 }
