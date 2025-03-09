@@ -31,4 +31,4 @@ jobs:
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
         run: |
           cd terraform/dev
-          terraform apply -input=false tfplan
+          terraform apply -var="github_access_token=${{ secrets.JPDEVS_ACCESS_TOKEN }}" -auto-approve
