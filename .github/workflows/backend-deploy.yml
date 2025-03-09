@@ -1,4 +1,5 @@
 name: Backend Deploy to Lambda
+
 on:
   push:
     branches:
@@ -8,8 +9,9 @@ on:
     branches:
       - main
       - develop
+
 jobs:
-  deploy:
+  setup-backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -19,14 +21,73 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
+
+      - name: Create S3 Bucket if not exists
+        run: |
+          # Check if bucket exists
+          if ! aws s3 ls "s3://jpdevs-terraform-state" 2>&1 | grep -q 'NoSuchBucket'; then
+            echo "Bucket already exists"
+          else
+            echo "Creating bucket"
+            aws s3 mb s3://jpdevs-terraform-state --region us-east-1
+            # Enable versioning for state recovery
+            aws s3api put-bucket-versioning --bucket jpdevs-terraform-state --versioning-configuration Status=Enabled
+          fi
+
+  deploy:
+    needs: setup-backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Update Backend Configuration
+        run: |
+          # Create backend configuration
+          cat > terraform/dev/backend.tf << 'EOL'
+          terraform {
+            backend "s3" {
+              bucket = "jpdevs-terraform-state"
+              key    = "dev/terraform.tfstate"
+              region = "us-east-1"
+            }
+          }
+          EOL
+
       - name: Terraform Init
-        run: terraform -chdir=terraform/dev init
+        run: terraform -chdir=terraform/dev init -reconfigure
+
+      - name: Import Existing Resources
+        run: |
+          cd terraform/dev
+          # Importar los recursos IAM existentes
+          terraform import module.iam.aws_iam_role.lambda_execution_role jpdevs-lambda-execution-role-dev || echo "Import role failed, proceeding..."
+          terraform import module.iam.aws_iam_policy.lambda_policy arn:aws:iam::*:policy/jpdevs-lambda-policy-dev || echo "Import policy failed, proceeding..."
+          
+          # Si el attachment existe, necesitamos saber el ID correcto para importarlo
+          # Obtenemos el ARN de la política
+          POLICY_ARN=$(aws iam list-policies --query "Policies[?PolicyName=='jpdevs-lambda-policy-dev'].Arn" --output text)
+          if [ ! -z "$POLICY_ARN" ]; then
+            terraform import module.iam.aws_iam_role_policy_attachment.lambda_policy_attachment jpdevs-lambda-execution-role-dev:$POLICY_ARN || echo "Import attachment failed, proceeding..."
+          fi
+
       - name: Terraform Plan
         run: |
           cd terraform/dev
+          # Renovar el token de GitHub primero
           terraform plan -input=false -var="github_access_token=${{ secrets.JPDEVS_ACCESS_TOKEN }}" -out=tfplan
+
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
         run: |

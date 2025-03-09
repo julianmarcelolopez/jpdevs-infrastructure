@@ -9,7 +9,7 @@ on:
       - main
       - develop
 jobs:
-  deploy:
+  setup-backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -19,14 +19,79 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
+
+      - name: Create S3 Bucket if not exists
+        run: |
+          # Check if bucket exists
+          if ! aws s3 ls "s3://jpdevs-terraform-state" 2>&1 | grep -q 'NoSuchBucket'; then
+            echo "Bucket already exists"
+          else
+            echo "Creating bucket"
+            aws s3 mb s3://jpdevs-terraform-state --region us-east-1
+            # Enable versioning for state recovery
+            aws s3api put-bucket-versioning --bucket jpdevs-terraform-state --versioning-configuration Status=Enabled
+          fi
+
+  deploy:
+    needs: setup-backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Update Backend Configuration
+        run: |
+          # Create backend configuration
+          cat > terraform/dev/backend.tf << 'EOL'
+          terraform {
+            backend "s3" {
+              bucket = "jpdevs-terraform-state"
+              key    = "dev/terraform.tfstate"
+              region = "us-east-1"
+            }
+          }
+          EOL
+
       - name: Terraform Init
-        run: terraform -chdir=terraform/dev init
+        run: terraform -chdir=terraform/dev init -reconfigure
+
+      - name: Import Amplify App if exists
+        run: |
+          cd terraform/dev
+          # Intentar obtener la aplicación Amplify existente por nombre
+          APP_ID=$(aws amplify list-apps --query "apps[?name=='jpdevs-frontend'].appId" --output text)
+          if [ ! -z "$APP_ID" ] && [ "$APP_ID" != "None" ]; then
+            echo "Found existing Amplify app with ID: $APP_ID"
+            terraform import module.amplify.aws_amplify_app.jpdevs_frontend $APP_ID || echo "Import app failed, proceeding..."
+          
+            # Intentar importar las ramas si existen
+            MAIN_BRANCH=$(aws amplify get-branch --app-id $APP_ID --branch-name main --query "branch.branchArn" --output text 2>/dev/null)
+            if [ ! -z "$MAIN_BRANCH" ] && [ "$MAIN_BRANCH" != "None" ]; then
+              terraform import module.amplify.aws_amplify_branch.main $APP_ID/main || echo "Import main branch failed, proceeding..."
+            fi
+          
+            DEV_BRANCH=$(aws amplify get-branch --app-id $APP_ID --branch-name develop --query "branch.branchArn" --output text 2>/dev/null)
+            if [ ! -z "$DEV_BRANCH" ] && [ "$DEV_BRANCH" != "None" ]; then
+              terraform import module.amplify.aws_amplify_branch.develop $APP_ID/develop || echo "Import develop branch failed, proceeding..."
+            fi
+          fi
+
       - name: Terraform Plan
         run: |
           cd terraform/dev
           terraform plan -input=false -var="github_access_token=${{ secrets.JPDEVS_ACCESS_TOKEN }}" -out=tfplan
+
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
         run: |
