@@ -1,6 +1,7 @@
 resource "aws_amplify_app" "jpdevs_frontend" {
   name = "jpdevs-frontend"
   repository = "https://github.com/julianmarcelolopez/jpdevs-front"
+  access_token = var.github_access_token
 
   # Configuraciones de build actualizadas para coincidir con tu amplify.yml
   build_spec = <<-EOT

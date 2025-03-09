@@ -24,7 +24,11 @@ jobs:
       - name: Terraform Init
         run: terraform -chdir=terraform/dev init
       - name: Terraform Plan
-        run: terraform -chdir=terraform/dev plan
+        run: |
+          cd terraform/dev
+          terraform plan -input=false -var="github_access_token=${{ secrets.JPDEVS_ACCESS_TOKEN }}" -out=tfplan
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
-        run: terraform -chdir=terraform/dev apply -auto-approve
+        run: |
+          cd terraform/dev
+          terraform apply -input=false tfplan

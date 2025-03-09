@@ -15,3 +15,9 @@ variable "branch_name" {
   type        = string
   default     = "develop"
 }
+
+variable "github_access_token" {
+  description = "GitHub access token for authentication"
+  type        = string
+  sensitive   = true
+}

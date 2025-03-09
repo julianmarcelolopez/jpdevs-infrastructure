@@ -25,4 +25,5 @@ module "amplify" {
   repository_url = "https://github.com/julianmarcelolopez/jpdevs-front"
   environment    = "dev"
   branch_name    = "develop"
+  github_access_token = var.github_access_token
 }
