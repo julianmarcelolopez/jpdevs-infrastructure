@@ -27,6 +27,7 @@ module "lambda" {
 module "amplify" {
   source = "../modules/amplify"
 
+  app_name = "jpdevs-front-dev"  # O podrías usar una variable: "jpdevs-front-${var.environment}"
   repository_url = "https://github.com/julianmarcelolopez/jpdevs-front"
   environment    = "dev"
   branch_name    = "develop"
