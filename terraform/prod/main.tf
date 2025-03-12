@@ -1,12 +1,39 @@
+# terraform/prod/main.tf
+
+provider "aws" {
+  region = var.aws_region
+}
+
+# Módulo IAM
+module "iam" {
+  source = "../modules/iam"
+
+  environment = "prod"
+  dynamodb_table_arns = ["arn:aws:dynamodb:${var.aws_region}:${var.aws_account_id}:table/jpdevs-table-prod"]
+}
+
+# Módulo Lambda
+module "lambda" {
+  source = "../modules/lambda"
+
+  function_name           = "jpdevs-backend"
+  environment             = "prod"
+  lambda_execution_role_arn = module.iam.lambda_execution_role_arn
+  code_bucket_name        = var.code_bucket_name
+  code_version            = var.code_version
+}
+
+# Módulo Amplify
 module "amplify" {
   source = "../modules/amplify"
 
-  app_name = "jpdevs-front-prod"
+  app_name = "jpdevs-frontend"  # Mantener el mismo nombre de la aplicación
   repository_url = "https://github.com/julianmarcelolopez/jpdevs-front"
   environment    = "prod"
   branch_name    = "main"
   github_access_token = var.github_access_token
 
+  # Si tu módulo de amplify soporta la configuración de múltiples ramas
   branches = {
     main = {
       framework = "React"
@@ -30,8 +57,9 @@ module "amplify" {
   }
 }
 
+# Outputs
 output "amplify_app_url" {
-  value = module.amplify.main_branch_url
+  value = module.amplify.branch_urls["main"]
 }
 
 output "all_branch_urls" {
